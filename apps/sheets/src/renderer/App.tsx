@@ -142,14 +142,7 @@ import {
   type TableDesignContext,
 } from './table-design-actions'
 
-import {
-  AgentLoop,
-  COMPLETED_VIA_TOOLS_TEXT,
-  composeSkills,
-  withAttachedSkills,
-  type AgentImage,
-} from '@genoffice/agent-core'
-import { imageGenerationAvailable, type AiSettings } from '@genoffice/ai-provider/browser'
+import type { AgentLoop } from '@genoffice/agent-core'
 import { type WorkbookOperation } from '@genoffice/xlsx-gateway/domain/workbook-dsl'
 import {
   columnLabel,
@@ -191,7 +184,6 @@ import {
 } from './outline-actions'
 import { moveOutlineEntries, shiftOutlineEntries } from './outline-model'
 import type { ApplyOutcome, ChangePlan } from '@genoffice/xlsx-gateway/domain/workbook.types'
-import { createElectronTransport } from './ai/transport'
 import {
   MAX_READ_RANGE_CELLS,
   type ActiveSheetInfo,
@@ -219,11 +211,7 @@ import {
   planTableRefresh,
 } from '@genoffice/xlsx-gateway/gateway/xlsx-connection-refresh'
 import { traceWorkbookDependents, traceWorkbookPrecedents } from './ai/formula-audit'
-import { createFilesSkill } from './ai/files-skill'
-import { createMergeSkill } from './ai/merge-skill'
 import { mergeAttachedWorkbooks } from './merge-workbooks'
-import { createSearchSkill } from './ai/search-skill'
-import { createImageSkill } from './ai/image-skill'
 import { ATTACHMENT_IMAGE_EXTS } from '../shared/desktop-api'
 import type {
   AttachmentAddResult,
@@ -1318,12 +1306,6 @@ export function App({
   function runDeterministicPlan(instruction: string): { text: string; isError?: boolean } {
     return runDeterministicPlanImpl(planContext(), instruction)
   }
-
-  // ---- AI: real LLM agent (falls back to the deterministic planner above
-  // when no provider is configured — see isAgentConfigured/handleSend) ----
-  const [aiSettings, setAiSettingsState] = useState<AiSettings | null>(null)
-  const aiSettingsRef = useRef<AiSettings | null>(null)
-  aiSettingsRef.current = aiSettings
 
   const [aiBusy, setAiBusy] = useState(false)
   // Display history survives restarts via localStorage; the AgentLoop's model
@@ -3424,7 +3406,7 @@ export function App({
     // skills ride with this one message only: the chips clear like attachments do
     const sentSkills = overrideInstruction ? [] : attachedSkillsRef.current
     if (sentSkills.length > 0) setAttachedSkills([])
-    const agentConfigured = isAgentConfigured()
+    const agentConfigured = false
     // Retry re-sends in place: drop the failed bubble and its error reply instead
     // of stacking a "Not sent" duplicate above the resent copy.
     const alreadyPersisted = retryIndex !== undefined && chat[retryIndex]?.persisted === true
