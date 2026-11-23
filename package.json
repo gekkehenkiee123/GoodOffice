@@ -1,8 +1,8 @@
 {
-  "name": "genoffice",
+  "name": "goodoffice",
   "version": "0.1.0",
   "private": true,
-  "description": "AI-native office suite (docs, sheets, slides, pdf, markdown, html)",
+  "description": "GoodOffice — an offline-first desktop spreadsheet editor",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=22.12.0",
@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/genspark-ai/genoffice.git"
+    "url": "git+https://github.com/gekkehenkiee123/GoodOffice.git"
   },
   "workspaces": [
     "apps/*",
@@ -47,7 +47,11 @@
     "licenses": "node tools/check-licenses.mjs",
     "dist:mac": "npm run notices && npm run build:all && npm run native:build:universal -w @genoffice/sheets && npm run dist:mac -w @genoffice/shell",
     "dist:win": "npm run notices && npm run build:all && npm run dist:win -w @genoffice/shell",
-    "dist:linux": "npm run notices && npm run build:all && npm run dist:linux -w @genoffice/shell"
+    "dist:linux": "npm run notices && npm run build:all && npm run dist:linux -w @genoffice/shell",
+    "dev:goodoffice": "npm run dev -w @genoffice/sheets",
+    "typecheck:goodoffice": "npm run typecheck -w @genoffice/sheets",
+    "test:goodoffice": "npm run test -w @genoffice/sheets",
+    "dist:goodoffice:mac": "npm run typecheck:goodoffice && npm run native:build:universal -w @genoffice/sheets && npm run build:electron -w @genoffice/sheets && electron-builder --projectDir apps/sheets --config apps/sheets/electron-builder.goodoffice.cjs --mac"
   },
   "dependencies": {
     "ws": "^8.21.1"
