@@ -25,7 +25,7 @@ export function installOfflineNetworkLock(electronSession: Session): void {
     let allowed = false
     try {
       const protocol = new URL(details.url).protocol
-      allowed = protocol === 'goodoffice:' || protocol === 'file:' || protocol === 'data:'
+      allowed = protocol === 'genoffice-app:' || protocol === 'file:' || protocol === 'data:'
     } catch {
       allowed = false
     }
