@@ -92,9 +92,7 @@ import {
   saveWorkbookViaSidecar,
   type ArchiveClient,
 } from '@genoffice/xlsx-gateway/gateway/xlsx-package-io'
-import {
-  refreshableQueriesOf,
-} from '@genoffice/xlsx-gateway/gateway/xlsx-connection-refresh'
+import { refreshableQueriesOf } from '@genoffice/xlsx-gateway/gateway/xlsx-connection-refresh'
 import type { PartReader } from '@genoffice/xlsx-gateway/gateway/xlsx-connections'
 import { parsePivotDefinition } from '@genoffice/xlsx-gateway/gateway/xlsx-pivot'
 import { parseSlicerState } from '@genoffice/xlsx-gateway/gateway/xlsx-slicer'
@@ -2011,6 +2009,7 @@ interface SheetsTabSession {
  */
 const pendingImports = new ImportRegistry()
 
+/** per-tab session state, keyed by webContents.id rather than a single-window closure. */
 const sheetsTabs = new Map<number, SheetsTabSession>()
 let activeSheetsWebContents: WebContents | null = null
 let pastedTempCleanupStarted = false
