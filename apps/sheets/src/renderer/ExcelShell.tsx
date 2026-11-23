@@ -84,9 +84,7 @@ import type {
   WorkbookConnection as QueryConnection,
   WorkbookQueriesResult,
 } from '../shared/desktop-api'
-import { AiChatPanel, type AiChatMessage } from './ai/AiChatPanel'
-import { AiSelectionAsk } from './ai/AiSelectionAsk'
-import type { SelectionAskAnchor } from './ai/selection-ask'
+import type { AiChatMessage } from './ai/AiChatPanel'
 import {
   PivotDialog,
   type PivotCreateRequest,
@@ -1038,42 +1036,6 @@ export function ExcelShell({
 
       {/* AI panel docks on the left, full height under the ribbon (unified with docs) */}
       <div className="sheet-body">
-        <AiChatPanel
-          isOpen={isCopilotOpen}
-          hideRail={!aiSidebarEnabled}
-          hasContent={sheetHasContent}
-          chat={chat}
-          {...(historicChat !== undefined ? { historicChat } : {})}
-          attachments={attachments}
-          attachedSkills={attachedSkills}
-          onToggleSkill={onToggleSkill}
-          attachNotice={attachNotice}
-          onPickAttachments={onPickAttachments}
-          onAddAttachmentPaths={onAddAttachmentPaths}
-          onAddPastedImage={onAddPastedImage}
-          onRemoveAttachment={onRemoveAttachment}
-          prompt={prompt}
-          preview={preview}
-          aiBusy={aiBusy}
-          sessionUsage={sessionUsage}
-          onPromptChange={onPromptChange}
-          onSend={onSend}
-          onSendQueued={(text, atts) => {
-            if (aiBusy) return false
-            onSend(text, atts)
-            return true
-          }}
-          onStop={onStop}
-          onNewChat={onNewChat}
-          onUndo={onUndo}
-          scopeRange={aiScopeRange}
-          scopeColumns={aiScopeColumns}
-          scopeLocked={aiScopeLocked}
-          onScopeDismiss={onAiScopeDismiss}
-          onCitation={onAiCitation}
-          onExpand={() => setIsCopilotOpen(true)}
-          onCollapse={() => setIsCopilotOpen(false)}
-        />
         <div className="sheet-main">
           <section className="workbook-area">
             <div id="univer-container" className="spreadsheet" />
@@ -1094,18 +1056,6 @@ export function ExcelShell({
               </div>
             )}
           </section>
-          {aiSelectionAskAnchor && aiScopeRange && !aiBusy && (
-            <AiSelectionAsk
-              anchor={aiSelectionAskAnchor}
-              range={aiScopeRange}
-              onDismiss={onAiSelectionAskDismiss}
-              onSend={(instruction) => {
-                setIsCopilotOpen(true)
-                onSend(instruction)
-              }}
-            />
-          )}
-
           {/* Status bar spans the sheet column only — the AI dock keeps the full window height (unified with docs/slides). */}
           <footer className="status-bar" onContextMenu={openStatsMenu}>
             <div className="status-left">
