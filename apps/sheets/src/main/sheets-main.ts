@@ -48,7 +48,6 @@ import type {
 } from 'electron'
 import { z } from 'zod'
 import {
-  abortOnDestroyed,
   decryptOoxml,
   encryptOoxml,
   isCfbFile,
@@ -62,7 +61,6 @@ import {
   installNavigationGuard,
   isHeadlessMode,
   printHtmlToPdf,
-  safeExternalUrl,
   showOpenDialogWithMemory,
   showSaveDialogWithMemory,
   helpMenuTemplate,
@@ -72,8 +70,6 @@ import {
   installRendererProtocol,
   registerRendererScheme,
   rendererUrl,
-  writeJsonAtomic,
-  restrictFileToOwner,
   recoveryCopyDiskNewer,
   configuredAuthorName,
   readLegacyImportSkip,
@@ -97,7 +93,6 @@ import {
   type ArchiveClient,
 } from '@genoffice/xlsx-gateway/gateway/xlsx-package-io'
 import {
-  connectionSourceOf,
   refreshableQueriesOf,
 } from '@genoffice/xlsx-gateway/gateway/xlsx-connection-refresh'
 import type { PartReader } from '@genoffice/xlsx-gateway/gateway/xlsx-connections'
@@ -115,9 +110,6 @@ import type {
 } from '../shared/desktop-api'
 import {
   ATTACHMENT_IMAGE_EXTS,
-  aiChatRequestSchema,
-  aiSettingsInputSchema,
-  aiStreamRequestSchema,
   workbookFileSchema,
   workbookFormulaCellsRequestSchema,
   workbookRowOutlineResultSchema,
@@ -136,8 +128,6 @@ import {
   workbookConnectionsRequestSchema,
   workbookConnectionsResultSchema,
   workbookPivotRequestSchema,
-  workbookRefreshRequestSchema,
-  workbookRefreshResultSchema,
   workbookRedactionsRequestSchema,
   workbookRedactionsResultSchema,
   workbookQueriesRequestSchema,
@@ -2011,8 +2001,6 @@ interface SheetsTabSession {
 /** per-tab session state, keyed by webContents.id — replaces the old single-window closures
  * that `registerIpcHandlers`/`validateSender` used to capture, which broke as soon as a second
  * tab (or a closed-then-reopened tab) registered and overwrote the previous closure. */
-/// Same ceiling as local add_image (readLocalImage's 20MB check)
-const MAX_REMOTE_IMAGE_BYTES = 20 * 1024 * 1024
 // the .csv/.tsv ceiling lives with the numbers it describes (the gateway's
 // csv-limits, exposed through csv-import-limit)
 
@@ -2487,7 +2475,7 @@ function readJson<T>(path: string, fallback: T): T {
 
 // Dev-only automation hooks: a fixed CDP port for driving the app from test
 // scripts, and a workbook path that bypasses the native file dialog.
-let forcedWorkbookPath = app.isPackaged ? undefined : process.env.XLSX_OPEN_PATH
+const forcedWorkbookPath = app.isPackaged ? undefined : process.env.XLSX_OPEN_PATH
 /** shell-queued workbook paths keyed by tab webContents id: a multi-select Open
  * creates several sheets tabs at once, so the path must be bound to its own tab
  * (a single global would be overwritten by the next iteration). One-shot, unlike
