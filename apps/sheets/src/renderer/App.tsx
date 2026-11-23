@@ -5417,9 +5417,6 @@ export function App({
       )}
       <ExcelShell
         openingWorkbook={openingWorkbook}
-        prompt={prompt}
-        preview={preview}
-        sheetHasContent={sheetHasContent}
         pageLayout={activePageLayout}
         printHost={printHost}
         onClosePrint={() => setPrintHost(null)}
@@ -5455,33 +5452,7 @@ export function App({
         emptyCsvNotice={emptyCsvNotice}
         onOpenWorkbook={() => void handleInspectWorkbook()}
         onDismissEmptyCsvNotice={() => setEmptyCsvNotice(false)}
-        aiBusy={aiBusy}
-        {...(sessionUsage !== undefined ? { sessionUsage } : {})}
-        chat={chat}
-        historicChat={historicChat}
-        attachments={attachments}
-        attachedSkills={attachedSkills}
-        onToggleSkill={toggleSkill}
-        attachNotice={attachNotice}
-        onPickAttachments={() => void handlePickAttachments()}
-        onAddAttachmentPaths={(paths) => void handleAddAttachmentPaths(paths)}
-        onAddPastedImage={(data, ext) => void handleAddPastedImage(data, ext)}
-        onRemoveAttachment={handleRemoveAttachment}
-        onPromptChange={setPrompt}
-        onSend={handleSend}
-        onStop={handleStopAgent}
-        onNewChat={handleNewChat}
         onUndo={handleUndo}
-        aiScopeRange={aiScopeChip.range}
-        aiScopeColumns={aiScopeChip.columns ?? null}
-        aiScopeLocked={aiScopeChip.locked}
-        aiSelectionAskAnchor={aiSelectionAskAnchor}
-        onAiSelectionAskDismiss={() => setAiSelectionAskAnchor(null)}
-        onAiScopeDismiss={() => {
-          setAiScopeDismissed(true)
-          setAiSelectionAskAnchor(null)
-        }}
-        onAiCitation={handleAiCitation}
         canUndo={univerHist.canUndo || (!lazyWorkbookRef.current && adapterRef.current.canUndo)}
         canRedo={univerHist.canRedo}
         onCommand={handleRibbonCommandFromRibbon}
@@ -5493,7 +5464,6 @@ export function App({
         onSave={() => void handleSave('save')}
         canSaveAs={workbookFile !== null}
         onSaveAs={() => void handleSave('save-as')}
-        onNameWithAi={() => void nameWithAi()}
         onRedo={handleRedo}
         autoSave={autoSave}
         onAutoSaveChange={setAutoSave}
