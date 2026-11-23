@@ -1,9 +1,9 @@
 {
   "name": "@genoffice/sheets",
-  "productName": "GenOffice Sheets",
+  "productName": "GoodOffice",
   "version": "0.1.0",
   "private": true,
-  "description": "Cross-platform AI-native spreadsheet compatibility prototype",
+  "description": "GoodOffice offline-first desktop spreadsheet editor",
   "license": "Apache-2.0",
   "main": "out/main/index.js",
   "scripts": {
@@ -71,5 +71,5 @@
     "vite": "^7.3.7",
     "vitest": "^4.1.12"
   },
-  "author": "GenOffice"
+  "author": "GoodOffice contributors"
 }
