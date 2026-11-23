@@ -2243,7 +2243,7 @@ export function App({
   }
 
   useEffect(() => {
-    const loadSettings = () => void window.desktopApi.getAiSettings().then(setAiSettingsState)
+    const loadSettings = () => void window.desktopApi.getAiSettings().then(setAiSettingsState).catch(() => {})
     loadSettings()
     return window.desktopApi.onAiSettingsChanged?.(loadSettings)
   }, [])
