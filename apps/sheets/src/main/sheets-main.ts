@@ -5665,9 +5665,14 @@ export function stopSheetsSidecar(): void {
   sidecar = null
 }
 
-export {
-  installApplicationMenu as installSheetsMenu,
-  startCaptureServer as startSheetsCaptureServer,
+export { installApplicationMenu as installSheetsMenu }
+
+/**
+ * Retained as a compatibility hook for the upstream multi-app shell.
+ * GoodOffice intentionally does not start a local HTTP capture/debug server.
+ */
+export function startSheetsCaptureServer(): void {
+  // Deliberately empty: GoodOffice is offline-only.
 }
 
 export function startSheetsStandalone(): void {
