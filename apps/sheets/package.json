@@ -1,9 +1,9 @@
 {
   "name": "@genoffice/sheets",
-  "productName": "GenOffice Sheets",
+  "productName": "GoodOffice",
   "version": "0.1.0",
   "private": true,
-  "description": "Cross-platform AI-native spreadsheet compatibility prototype",
+  "description": "GoodOffice offline-first desktop spreadsheet editor",
   "license": "Apache-2.0",
   "main": "out/main/index.js",
   "scripts": {
@@ -20,7 +20,8 @@
     "compat": "tsx scripts/verify-compatibility.ts",
     "benchmark": "tsx scripts/benchmark-xlsx.ts",
     "benchmark:large": "npm run native:build && tsx scripts/benchmark-large-xlsx.ts",
-    "gate": "npm run typecheck && npm run fixtures && npm test && npm run compat"
+    "gate": "npm run typecheck && npm run fixtures && npm test && npm run compat",
+    "build:electron": "electron-vite build"
   },
   "dependencies": {
     "@eslint-community/regexpp": "^4.12.2",
@@ -71,5 +72,5 @@
     "vite": "^7.3.7",
     "vitest": "^4.1.12"
   },
-  "author": "GenOffice"
+  "author": "GoodOffice contributors"
 }
