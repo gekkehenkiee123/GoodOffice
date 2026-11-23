@@ -51,7 +51,7 @@
     "dev:goodoffice": "npm run dev -w @genoffice/sheets",
     "typecheck:goodoffice": "npm run typecheck -w @genoffice/sheets",
     "test:goodoffice": "npm run test -w @genoffice/sheets",
-    "dist:goodoffice:mac": "npm run typecheck:goodoffice && npm run native:build:universal -w @genoffice/sheets && npm run build:electron -w @genoffice/sheets && electron-builder --projectDir apps/sheets --config apps/sheets/electron-builder.goodoffice.cjs --mac"
+    "dist:goodoffice:mac": "npm run typecheck:goodoffice && npm run native:build:universal -w @genoffice/sheets && npm run build:electron -w @genoffice/sheets && electron-builder --projectDir apps/sheets --config electron-builder.goodoffice.cjs --mac"
   },
   "dependencies": {
     "ws": "^8.21.1"
