@@ -7,7 +7,6 @@ import type {
   AiStreamChunk,
   GenSparkAccountStatus,
 } from '@genoffice/ai-provider'
-import type { ProjectApi } from '@genoffice/project-store'
 import type {
   AttachmentAddResult,
   AttachmentImageResult,
@@ -1059,7 +1058,6 @@ const aiNamingApi = {
 }
 
 contextBridge.exposeInMainWorld('desktopApi', desktopApi)
-contextBridge.exposeInMainWorld('aiNamingApi', aiNamingApi)
 
 // The frame's own spell engine (Chromium Hunspell / the OS dictionary): the
 // same checker docs' squiggles run on, batch-driven over sheet cell texts so
@@ -1072,16 +1070,6 @@ contextBridge.exposeInMainWorld('nativeSpell', {
   getWordSuggestions: (word: unknown): string[] =>
     typeof word === 'string' ? webFrame.getWordSuggestions(word) : [],
 })
-
-const projectApi: ProjectApi = {
-  resolveChat: (args) => ipcRenderer.invoke('project:resolveChat', args),
-  appendChat: (args) => ipcRenderer.invoke('project:appendChat', args),
-  loadChat: (args) => ipcRenderer.invoke('project:loadChat', args),
-  rebindChat: (args) => ipcRenderer.invoke('project:rebindChat', args),
-  listChats: (args) => ipcRenderer.invoke('project:listChats', args),
-  deleteChat: (args) => ipcRenderer.invoke('project:deleteChat', args),
-}
-contextBridge.exposeInMainWorld('projectApi', projectApi)
 
 // Off by default. e2e drivers launch the BUILT app with GENOFFICE_DEBUG_HOOKS=1
 // so the renderer exposes window.__genofficeDebug (see App.tsx) — the dev-only
