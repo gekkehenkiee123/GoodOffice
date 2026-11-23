@@ -81,28 +81,6 @@ import {
 } from '@genoffice/electron-utils'
 import { createI18n, getUiLang, type Lang, normalizeLang, setUiLang } from '@genoffice/i18n'
 
-import {
-  AiCreditsError,
-  AiTimeoutError,
-  isAiNetworkError,
-  isAiOverloadedError,
-  isAiRegionBlockedError,
-  chatForProvider,
-  defaultAiSettings,
-  activeProvider,
-  maxOutputTokensOf,
-  resolveAiSettings,
-  setAiUserAgent,
-  setRescueFetch,
-  resolveProfileCredential,
-  streamForProvider,
-  type AiProviderId,
-  type AiSettings,
-  type AiStreamChunk,
-  type GenSparkAccountStatus,
-  type LegacyAiSettings,
-} from '@genoffice/ai-provider'
-import { shutdownCodexAppServers } from '@genoffice/ai-provider/codex-app-server'
 import { decodeCsvBuffer } from '@genoffice/xlsx-gateway/gateway/csv-import'
 import type { CsvImportProgress } from '@genoffice/xlsx-gateway/gateway/csv-import'
 import { delimitedImportLimit } from './csv-import-limit'
@@ -110,19 +88,6 @@ import {
   csvToXlsxBufferForOpen,
   sheetCsvToXlsxBuffer,
 } from '@genoffice/xlsx-gateway/gateway/csv-import-xlsx'
-import {
-  ensureGenofficeLogin,
-  noteGskCallFailure,
-  setGenofficeLoginOpener,
-  gskApiKey,
-  gskLoginInfo,
-  hasGskAuth,
-  setGskProxyUrl,
-  webSearchTool,
-  imageSearchTool,
-  generateImageTool,
-  localMediaRoots,
-} from '@genoffice/ai-search'
 import { parseFileToText } from '@genoffice/file-parse'
 import type { CellEdit, SheetStructuralOps } from '@genoffice/xlsx-gateway/gateway/xlsx-gateway'
 import {
@@ -2521,12 +2486,8 @@ function readJson<T>(path: string, fallback: T): T {
   return fallback
 }
 
-const SETTINGS_PATH = () => userDataPath('ai-settings.json')
-
 // Dev-only automation hooks: a fixed CDP port for driving the app from test
 // scripts, and a workbook path that bypasses the native file dialog.
-const debugPort = app.isPackaged ? undefined : process.env.XLSX_DEBUG_PORT
-if (debugPort) app.commandLine.appendSwitch('remote-debugging-port', debugPort)
 let forcedWorkbookPath = app.isPackaged ? undefined : process.env.XLSX_OPEN_PATH
 /** shell-queued workbook paths keyed by tab webContents id: a multi-select Open
  * creates several sheets tabs at once, so the path must be bound to its own tab
@@ -2555,69 +2516,12 @@ export function setSheetsNewBlank(): void {
   pendingNewBlank = true
 }
 
-// capturePage forces a renderer frame even when the window is occluded or on
-// another Space, unlike CDP Page.captureScreenshot / macOS screencapture.
-function startCaptureServer(): void {
-  if (!debugPort) return
-  const server = createServer((request, response) => {
-    const url = new URL(request.url ?? '/', 'http://127.0.0.1')
-    if (url.pathname === '/open') {
-      forcedWorkbookPath = url.searchParams.get('path') ?? undefined
-      response.writeHead(200)
-      response.end('ok')
-      return
-    }
-    // Drives the File menu from test scripts: CDP input can't reach native
-    // menu accelerators, and osascript focus-stealing is flaky.
-    if (url.pathname === '/menu') {
-      const action = url.searchParams.get('action')
-      if (
-        action === 'open' ||
-        action === 'save' ||
-        action === 'save-as' ||
-        action === 'print' ||
-        action === 'export-pdf' ||
-        action === 'export-csv' ||
-        action === 'undo' ||
-        action === 'redo'
-      ) {
-        sendSheetsMenuAction(action)
-        response.writeHead(200)
-        response.end('ok')
-      } else {
-        response.writeHead(400)
-        response.end('unknown action')
-      }
-      return
-    }
-    const webContents = getActiveSheetsWebContents()
-    if (url.pathname !== '/capture' || !webContents) {
-      response.writeHead(404)
-      response.end()
-      return
-    }
-    webContents
-      .capturePage()
-      .then((image) => {
-        response.writeHead(200, { 'Content-Type': 'image/png' })
-        response.end(image.toPNG())
-      })
-      .catch((error: unknown) => {
-        response.writeHead(500)
-        response.end(String(error))
-      })
-  })
-  server.listen(Number(debugPort) + 1, '127.0.0.1')
-}
-
 const sidecarOpenResultSchema = workbookFileSchema.omit({
   sha256: true,
   readOnly: true,
 })
 
-export async function createSheetsWindow(
-  options: { includeAiHandlers?: boolean } = { includeAiHandlers: false },
-): Promise<BrowserWindow> {
+export async function createSheetsWindow(): Promise<BrowserWindow> {
   await getSessionSnapshotDirectory()
   const client = sidecar ?? new XlsxSidecarClient(resolveSidecarPath())
   sidecar = client
@@ -2641,7 +2545,6 @@ export async function createSheetsWindow(
   })
   mainWindow = window
   registerSheetsIpc()
-  if (options.includeAiHandlers ?? true) registerProjectIpc()
   registerSheetsSession(window.webContents, client)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event) => event.preventDefault())
@@ -2746,7 +2649,7 @@ export async function exportSheetsPdfHeadless(
 
 /** tab-mode equivalent of createSheetsWindow: same runtime/IPC wiring, no BrowserWindow of its own. */
 export function createSheetsView(
-  options: { includeAiHandlers?: boolean; openingWorkbook?: boolean } = {},
+  options: { openingWorkbook?: boolean } = {},
 ): WebContentsView {
   const client = sidecar ?? new XlsxSidecarClient(resolveSidecarPath())
   sidecar = client
@@ -2761,7 +2664,6 @@ export function createSheetsView(
     },
   })
   registerSheetsIpc()
-  if (options.includeAiHandlers ?? true) registerSheetsAiIpc()
   registerSheetsSession(view.webContents, client)
   view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   view.webContents.on('will-navigate', (event) => event.preventDefault())
@@ -4425,387 +4327,6 @@ export function registerSheetsIpc(): void {
   )
 }
 
-let aiIpcRegistered = false
-
-export function registerSheetsAiIpc(): void {
-  if (aiIpcRegistered) return
-  aiIpcRegistered = true
-  app.once('before-quit', shutdownCodexAppServers)
-
-  // Node fetch (undici) direct connections get reset under VPN/tun setups; retry over Chromium's stack
-  setRescueFetch((url, init) => net.fetch(url, init))
-  setAiUserAgent(`GenOffice/${app.getVersion()}`)
-
-  ipcMain.handle(IPC_CHANNELS.aiGetSettings, (event): AiSettings => {
-    sessionFor(event)
-    const stored = readJson<Partial<AiSettings> & LegacyAiSettings>(SETTINGS_PATH(), {})
-    // heal the file mode of a settings file saved by an older build: BYOK keys
-    // are credentials and must not stay readable by other local accounts
-    restrictFileToOwner(SETTINGS_PATH())
-    const settings = resolveAiSettings(stored, defaultAiSettings())
-    // a stored BYOK provider is honored when usable; half-filled configs fall back to genspark
-    settings.provider = activeProvider(settings)
-    return settings
-  })
-
-  // Genspark account (gsk login state): the auth source for AI features; the
-  // frontend uses it to guide sign-in when logged out
-  ipcMain.handle(
-    IPC_CHANNELS.aiGskStatus,
-    async (_event, withEmail?: unknown): Promise<GenSparkAccountStatus> => {
-      if (!hasGskAuth()) return { loggedIn: false }
-      if (!withEmail) return { loggedIn: true }
-      const info = await gskLoginInfo()
-      return info?.email ? { loggedIn: true, email: info.email } : { loggedIn: true }
-    },
-  )
-
-  // a 401 on the gsk key opens the device-code login once (genoffice-auth recovery)
-  setGenofficeLoginOpener((url) => void shell.openExternal(url))
-
-  ipcMain.handle(IPC_CHANNELS.aiGskLogin, () => {
-    ensureGenofficeLogin((url) => void shell.openExternal(url))
-  })
-
-  ipcMain.handle(IPC_CHANNELS.aiSetSettings, async (event, input: unknown) => {
-    sessionFor(event)
-    const settings = aiSettingsInputSchema.parse(input)
-    writeJsonAtomic(SETTINGS_PATH(), settings, 0o600)
-    for (const wc of webContents.getAllWebContents())
-      if (!wc.isDestroyed()) wc.send(IPC_CHANNELS.aiSettingsChanged)
-  })
-
-  ipcMain.handle(IPC_CHANNELS.aiChat, async (event, input: unknown) => {
-    sessionFor(event)
-    const request = aiChatRequestSchema.parse(input)
-    const provider = request.settings.provider as AiProviderId
-    let config = request.settings.providers[provider]
-    // set only when the gsk key was injected: a 401 then means that key expired
-    let gskKey = ''
-    if (provider === 'genspark' && config && !config.apiKey) {
-      gskKey = gskApiKey()
-      config = { ...config, apiKey: gskKey }
-    }
-    // a custom endpoint may name an environment variable instead of storing a key
-    config = config ? resolveProfileCredential(config) : config
-    if (!config || (provider !== 'codex' && !config.apiKey)) {
-      return {
-        ok: false,
-        error: provider === 'genspark' ? tm('errGskNotLoggedIn') : tm('errNoApiKey', { provider }),
-      }
-    }
-    if (provider !== 'codex' && !config.model) return { ok: false, error: tm('errNoModel') }
-    try {
-      const result = await chatForProvider(provider, config, request.system, request.user)
-      // the one-shot path reports HTTP failures as ok:false with the raw body —
-      // replace capacity/rate-limit dumps with the localized "busy" message
-      if (!result.ok && isAiOverloadedError(result.error)) {
-        return { ok: false, error: tm('errAiBusy') }
-      }
-      if (!result.ok && isAiRegionBlockedError(result.error)) {
-        return { ok: false, error: tm('errAiRegion') }
-      }
-      if (!result.ok) noteGskCallFailure(gskKey, result.error)
-      return result
-    } catch (err) {
-      noteGskCallFailure(gskKey, err)
-      return {
-        ok: false,
-        error: isAiOverloadedError(err)
-          ? tm('errAiBusy')
-          : isAiRegionBlockedError(err)
-            ? tm('errAiRegion')
-            : String(err),
-      }
-    }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.aiStream, async (event, input: unknown) => {
-    const entry = sessionFor(event)
-    const request = aiStreamRequestSchema.parse(input)
-    const { requestId, system, messages } = request
-    const tools = request.tools ?? []
-    const maxTokens = request.maxTokens ?? maxOutputTokensOf(request.settings)
-    const provider = request.settings.provider as AiProviderId
-    let config = request.settings.providers[provider]
-    // Genspark's key never enters the settings file; it is read from the gsk
-    // login state per request
-    // set only when the gsk key was injected: a 401 then means that key expired
-    let gskKey = ''
-    if (provider === 'genspark' && config && !config.apiKey) {
-      gskKey = gskApiKey()
-      config = { ...config, apiKey: gskKey }
-    }
-    // a custom endpoint may name an environment variable instead of storing a key
-    config = config ? resolveProfileCredential(config) : config
-    const send = (chunk: AiStreamChunk) => {
-      if (!event.sender.isDestroyed()) event.sender.send(IPC_CHANNELS.aiStreamChunk, chunk)
-    }
-    if (!config || (provider !== 'codex' && !config.apiKey)) {
-      send({
-        requestId,
-        type: 'error',
-        error: provider === 'genspark' ? tm('errGskNotLoggedIn') : tm('errNoApiKey', { provider }),
-      })
-      return
-    }
-    if (provider !== 'codex' && !config.model) {
-      send({ requestId, type: 'error', error: tm('errNoModel') })
-      return
-    }
-    const controller = new AbortController()
-    entry.aiStreams.set(requestId, controller)
-    const unwatchSender = abortOnDestroyed(event.sender, controller)
-    // wire-activity keepalive: lets the renderer's silence watchdog tell a slow turn from a dead one
-    let lastPing = 0
-    const ping = () => {
-      const now = Date.now()
-      if (now - lastPing < 5_000) return
-      lastPing = now
-      send({ requestId, type: 'ping' })
-    }
-    try {
-      let stopReason: string | undefined
-      await streamForProvider(provider, config, system, messages, tools, maxTokens, {
-        ...(request.sessionId ? { sessionId: request.sessionId } : {}),
-        signal: controller.signal,
-        onDelta: (text) => send({ requestId, type: 'delta', text }),
-        onReasoningDelta: (text) => send({ requestId, type: 'reasoning', text }),
-        onToolCall: (toolCall) => send({ requestId, type: 'tool-call', toolCall }),
-        onActivity: ping,
-        onStopReason: (reason) => {
-          stopReason = reason
-        },
-        onUsage: (usage) => send({ requestId, type: 'usage', usage }),
-      })
-      // sheets tsconfig sets exactOptionalPropertyTypes: an explicit
-      // `stopReason: undefined` is not assignable to AiStreamChunk, so only
-      // include the property when a reason was actually reported.
-      send(
-        stopReason === undefined
-          ? { requestId, type: 'done' }
-          : { requestId, type: 'done', stopReason },
-      )
-    } catch (err) {
-      if (controller.signal.aborted) {
-        send({ requestId, type: 'done' })
-      } else {
-        // an expired/revoked key drops to signed-out so the inline sign-in button shows
-        noteGskCallFailure(gskKey, err)
-        send({
-          requestId,
-          type: 'error',
-          error: err instanceof Error ? err.message : String(err),
-          ...(err instanceof AiTimeoutError
-            ? { errorCode: 'timeout' as const }
-            : err instanceof AiCreditsError
-              ? { errorCode: 'credits' as const }
-              : isAiNetworkError(err)
-                ? { errorCode: 'network' as const }
-                : isAiOverloadedError(err)
-                  ? { errorCode: 'overloaded' as const }
-                  : isAiRegionBlockedError(err)
-                    ? { errorCode: 'region' as const }
-                    : {}),
-        })
-      }
-    } finally {
-      unwatchSender()
-      entry.aiStreams.delete(requestId)
-    }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.aiStreamCancel, (event, requestId: unknown) => {
-    const entry = sessionFor(event)
-    entry.aiStreams.get(z.string().min(1).parse(requestId))?.abort()
-  })
-
-  // Shared search tools (content + images): Serper with DuckDuckGo fallback
-  // (same source as slides/docs)
-  ipcMain.handle('ai:web-search', async (_event, query: unknown, maxResults?: unknown) => {
-    try {
-      return await webSearchTool(
-        SETTINGS_PATH(),
-        z.string().parse(query),
-        typeof maxResults === 'number' ? maxResults : 6,
-      )
-    } catch (err) {
-      return { results: [], method: 'error', error: String(err) }
-    }
-  })
-  ipcMain.handle('ai:image-search', async (_event, query: unknown, maxResults?: unknown) => {
-    try {
-      return await imageSearchTool(
-        SETTINGS_PATH(),
-        z.string().parse(query),
-        typeof maxResults === 'number' ? maxResults : 8,
-      )
-    } catch (err) {
-      return { images: [], method: 'error', error: String(err) }
-    }
-  })
-
-  // Standalone parity with docs-main's shell-wide handler: AI-supplied URLs are
-  // prompt-injectable, so fetchRemoteImage refuses non-http schemes and
-  // private/link-local targets and validates every redirect hop. Size-capped to
-  // match the local add_image limit.
-  ipcMain.handle(
-    'ai:fetch-image',
-    async (_event, url: unknown): Promise<{ base64: string; mime: string } | null> => {
-      try {
-        const resp = await fetchRemoteImage(z.string().parse(url))
-        if (!resp || !resp.ok || !resp.body) return null
-        const declared = Number(resp.headers.get('content-length') ?? 0)
-        if (declared > MAX_REMOTE_IMAGE_BYTES) return null
-        // Stream with a running cap: a missing/understated Content-Length must
-        // not let a prompt-injected URL buffer unbounded bytes before a
-        // post-hoc size check
-        const reader = resp.body.getReader()
-        const chunks: Buffer[] = []
-        let received = 0
-        for (;;) {
-          const { done, value } = await reader.read()
-          if (done) break
-          received += value.byteLength
-          if (received > MAX_REMOTE_IMAGE_BYTES) {
-            await reader.cancel()
-            return null
-          }
-          chunks.push(Buffer.from(value))
-        }
-        const buf = Buffer.concat(chunks)
-        const ct = resp.headers.get('content-type') ?? ''
-        const mime = ct.includes('png')
-          ? 'image/png'
-          : ct.includes('gif')
-            ? 'image/gif'
-            : 'image/jpeg'
-        return { base64: buf.toString('base64'), mime }
-      } catch {
-        return null
-      }
-    },
-  )
-}
-
-// ── project-store IPC (standalone mode) ────────────────────────────────────
-// In shell mode docs-main.registerProjectIpc has already registered it
-// (idempotency guard).
-
-let sheetsProjectStore: ProjectStore | null = null
-let sheetsProjectIpcRegistered = false
-
-function getSheetsProjectStore(): ProjectStore {
-  if (!sheetsProjectStore) sheetsProjectStore = new ProjectStore(app.getPath('userData'))
-  return sheetsProjectStore
-}
-
-export function registerProjectIpc(): void {
-  if (sheetsProjectIpcRegistered) return
-  sheetsProjectIpcRegistered = true
-
-  ipcMain.handle(
-    'project:resolveChat',
-    (event, args: { filePath: string | null; tempChatId?: string; sessionId?: string }) => {
-      const store = getSheetsProjectStore()
-      store.ensureDefaultProject()
-
-      // sheets mode: reverse-look up the file path via sessionId
-      let resolvedPath = args.filePath
-      if (!resolvedPath && args.sessionId) {
-        const tabEntry = sheetsTabs.get(event.sender.id)
-        if (tabEntry) {
-          resolvedPath = tabEntry.sessions.get(args.sessionId)?.path ?? null
-        }
-      }
-
-      if (!resolvedPath) {
-        return { projectId: 'default', chatId: args.tempChatId ?? `unsaved-${Date.now()}` }
-      }
-      return store.resolveChatForFile(resolvedPath)
-    },
-  )
-
-  ipcMain.handle(
-    'project:appendChat',
-    (
-      _event,
-      args: {
-        projectId: string
-        chatId: string
-        role: 'user' | 'assistant'
-        text: string
-        tools?: Array<{
-          name: string
-          summary: string
-          isError?: boolean
-          input?: string
-          output?: string
-        }>
-        attachments?: Array<{ name: string; path?: string; ext?: string; sizeBytes?: number }>
-        scope?: { label: string; text?: string }
-      },
-    ) => {
-      if (args.role !== 'user' && args.role !== 'assistant') {
-        throw new Error(`Invalid chat role: ${String(args.role)}`)
-      }
-      if (typeof args.text !== 'string' || args.text.length > 200_000) {
-        throw new Error('Invalid chat text: must be a string up to 200000 chars')
-      }
-      if (args.tools && !Array.isArray(args.tools)) throw new Error('Invalid chat tools')
-      if (args.attachments && !Array.isArray(args.attachments)) {
-        throw new Error('Invalid chat attachments')
-      }
-      const msg: Parameters<ProjectStore['appendChatMessage']>[2] = {
-        role: args.role,
-        text: args.text,
-      }
-      if (args.tools) msg.tools = args.tools
-      if (args.attachments) msg.attachments = args.attachments
-      if (args.scope) msg.scope = args.scope
-
-      getSheetsProjectStore().appendChatMessage(args.projectId, args.chatId, msg)
-    },
-  )
-
-  ipcMain.handle(
-    'project:loadChat',
-    (_event, args: { projectId: string; chatId: string; limit?: number }) => {
-      return getSheetsProjectStore().loadChat(args.projectId, args.chatId, args.limit ?? 200)
-    },
-  )
-
-  ipcMain.handle(
-    'project:rebindChat',
-    (
-      event,
-      args: {
-        projectId: string
-        tempChatId: string
-        newChatId?: string
-        newFilePath?: string
-        sessionId?: string
-      },
-    ) => {
-      const store = getSheetsProjectStore()
-      let path = args.newFilePath ?? null
-      if (!path && args.sessionId) {
-        path = resolveSheetsSessionPath(event.sender.id, args.sessionId)
-      }
-      if (path) {
-        return store.rebindChatToFile(args.projectId, args.tempChatId, path)
-      }
-      if (args.newChatId) store.rebindChat(args.projectId, args.tempChatId, args.newChatId)
-      return { projectId: args.projectId, chatId: args.newChatId ?? args.tempChatId }
-    },
-  )
-}
-
-/**
- * sessionId → workbook file path reverse lookup (injected into docs-main's
- * project:resolveChat in shell mode). In standalone mode the handler registered
- * above queries sheetsTabs directly.
- */
 export function resolveSheetsSessionPath(senderId: number, sessionId: string): string | null {
   return sheetsTabs.get(senderId)?.sessions.get(sessionId)?.path ?? null
 }
@@ -5684,7 +5205,6 @@ export function stopSheetsSidecar(): void {
 
 export {
   installApplicationMenu as installSheetsMenu,
-  startCaptureServer as startSheetsCaptureServer,
 }
 
 export function startSheetsStandalone(): void {
@@ -5709,7 +5229,7 @@ export function startSheetsStandalone(): void {
     setUiLang(normalizeLang(process.env.GENOFFICE_LANG ?? app.getLocale()))
     app.setAccessibilitySupportEnabled(true)
     installApplicationMenu()
-    return createSheetsWindow({ includeAiHandlers: false })
+    return createSheetsWindow()
   })
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
