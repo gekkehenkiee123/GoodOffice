@@ -20,7 +20,8 @@
     "compat": "tsx scripts/verify-compatibility.ts",
     "benchmark": "tsx scripts/benchmark-xlsx.ts",
     "benchmark:large": "npm run native:build && tsx scripts/benchmark-large-xlsx.ts",
-    "gate": "npm run typecheck && npm run fixtures && npm test && npm run compat"
+    "gate": "npm run typecheck && npm run fixtures && npm test && npm run compat",
+    "dist:mac": "npm run native:build:universal && electron-builder --config electron-builder.goodoffice.cjs --mac"
   },
   "dependencies": {
     "@eslint-community/regexpp": "^4.12.2",
@@ -69,7 +70,8 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.7",
-    "vitest": "^4.1.12"
+    "vitest": "^4.1.12",
+    "electron-builder": "^26.0.12"
   },
   "author": "GoodOffice contributors"
 }
