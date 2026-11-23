@@ -17,7 +17,7 @@ function blockedRequest(): never {
  *
  * The Electron session hook blocks browser/network-service requests. The
  * global fetch and Node transport guards cover main-process code that bypasses
- * Chromium. Local app resources use the goodoffice:// protocol and are not
+ * Chromium. Local app resources use the genoffice-app:// protocol and are not
  * affected. No localhost exception is made in packaged or development builds.
  */
 export function installOfflineNetworkLock(electronSession: Session): void {
