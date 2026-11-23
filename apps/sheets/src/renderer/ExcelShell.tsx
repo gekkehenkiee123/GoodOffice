@@ -656,7 +656,7 @@ export function ExcelShell({
       else if (!protection.protected) setProtectSheetMode('protect')
       else if (protection.hasPassword) setProtectSheetMode('unprotect')
       else onCommand('sheet-unprotect')
-    else if (command === 'chart-element-title') setChartTextTarget('title')
+    } else if (command === 'chart-element-title') setChartTextTarget('title')
     else if (command === 'chart-element-axis-cat') setChartTextTarget('axis-category')
     else if (command === 'chart-element-axis-val') setChartTextTarget('axis-value')
     else if (command === 'formula-bar-toggle') toggleFormulaBarExpand()
