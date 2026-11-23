@@ -9,18 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GoodOffice</title>
     <style>
-      /* GoodOffice is a focused spreadsheet editor: AI-only UI is removed. */
-      .ai-entry,
-      .qa-name-with-ai,
-      .copilot,
-      .ai-ask-trigger,
-      [class^="ai-"],
-      [class*=" ai-"] {
-        display: none !important;
-      }
-      .ribbon-group:has(.ai-entry) {
-        display: none !important;
-      }
+      /* The spreadsheet canvas takes the full width; there is no assistant rail. */
       .sheet-body {
         grid-template-columns: minmax(0, 1fr) !important;
       }
