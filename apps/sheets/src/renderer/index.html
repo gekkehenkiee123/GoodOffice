@@ -4,10 +4,29 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' ws://localhost:*"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GenOffice Sheets</title>
+    <title>GoodOffice</title>
+    <style>
+      /* GoodOffice is a spreadsheet-only offline app. */
+      .copilot,
+      .ai-entry,
+      .ai-ask-trigger,
+      .qa-name-with-ai,
+      .ai-chat-panel,
+      .ai-selection-ask,
+      [class*="ai-chat"],
+      [class*="ai-selection"] {
+        display: none !important;
+      }
+      .ribbon-group:has(.ai-entry) {
+        display: none !important;
+      }
+      .sheet-body {
+        grid-template-columns: minmax(0, 1fr) !important;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
