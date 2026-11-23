@@ -33,7 +33,6 @@ import {
   dialog,
   ipcMain,
   Menu,
-  net,
   screen,
   session as electronSession,
   shell,
@@ -60,7 +59,6 @@ import {
   buildPrintableHtml,
   configuredDefaultSaveDir,
   contextMenuLabels,
-  fetchRemoteImage,
   installContextMenu,
   installNavigationGuard,
   isHeadlessMode,
@@ -82,8 +80,6 @@ import {
   readLegacyImportSkip,
   writeLegacyImportSkip,
 } from '@genoffice/electron-utils'
-import { createMainProcessProxyDispatcher } from '@genoffice/electron-utils/main-proxy'
-import { fetchRemoteTable } from '@genoffice/electron-utils/remote-table'
 import { createI18n, getUiLang, type Lang, normalizeLang, setUiLang } from '@genoffice/i18n'
 import { ProjectStore } from '@genoffice/project-store'
 
@@ -223,6 +219,7 @@ import {
 } from './temp-files'
 import { XlsxSidecarClient } from './xlsx-sidecar-client'
 import { sessionAfterRename } from './session-rename'
+import { installOfflineNetworkLock } from './offline-network'
 
 /**
  * Sheets main-process logic as an embeddable module: no top-level lifecycle.
@@ -2621,7 +2618,7 @@ const sidecarOpenResultSchema = workbookFileSchema.omit({
 })
 
 export async function createSheetsWindow(
-  options: { includeAiHandlers?: boolean } = {},
+  options: { includeAiHandlers?: boolean } = { includeAiHandlers: false },
 ): Promise<BrowserWindow> {
   await getSessionSnapshotDirectory()
   const client = sidecar ?? new XlsxSidecarClient(resolveSidecarPath())
@@ -2633,7 +2630,7 @@ export async function createSheetsWindow(
     minWidth: 720,
     minHeight: 550,
     show: false,
-    title: 'GenOffice Sheets',
+    title: 'GoodOffice',
     // Traffic lights sit inside the toolbar row.
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     webPreferences: {
@@ -3048,22 +3045,6 @@ export function registerSheetsIpc(): void {
     sessionFor(event)
     return configuredAuthorName(app)
   })
-
-  // Registered here (not in registerSheetsAiIpc, skipped in shell mode):
-  // slides' ai:generate-image only exists once a slides view opens, so sheets
-  // owns its channel the way pdf does.
-  ipcMain.handle(
-    IPC_CHANNELS.aiGenerateImage,
-    (event, op: { prompt?: unknown; aspectRatio?: unknown }) =>
-      generateImageTool(
-        SETTINGS_PATH(),
-        {
-          prompt: String(op?.prompt ?? ''),
-          ...(op?.aspectRatio ? { aspectRatio: String(op.aspectRatio) } : {}),
-        },
-        { mediaRoots: sheetsMediaRoots(event.sender.id) },
-      ),
-  )
 
   ipcMain.on(IPC_CHANNELS.recoveryPromptReply, (event, restore: unknown) => {
     recoveryPromptWaiters.get(event.sender.id)?.(restore === true ? 'restore' : 'discard')
@@ -3837,28 +3818,8 @@ export function registerSheetsIpc(): void {
   // is resolved from the workbook part here — this IPC is not a fetch proxy.
   // The fetch still goes through the SSRF gate, because a workbook could name
   // loopback, a cloud metadata endpoint or a UNC share.
-  ipcMain.handle(IPC_CHANNELS.refreshWorkbookConnection, async (event, input: unknown) => {
-    const entry = sessionFor(event)
-    const request = workbookRefreshRequestSchema.parse(input)
-    const session = entry.sessions.get(request.sessionId)
-    if (!session) throw new Error('Unknown workbook session.')
-    // Only this part is needed, and a workbook without connections has no
-    // listed query to refresh: a missing part means "no such connection".
-    const connectionsXml = await readArchiveEntryText(
-      entry.client,
-      session.snapshotPath,
-      'xl/connections.xml',
-    ).catch(() => undefined)
-    const read: PartReader = async (path) =>
-      path === 'xl/connections.xml' ? connectionsXml : undefined
-    const source = await connectionSourceOf(read, request.connectionId)
-    if (!source) throw new Error('This workbook has no refreshable web query with that id.')
-    const table = await fetchRemoteTable(source)
-    if (!table) throw new Error('Could not read a table from that address.')
-    return workbookRefreshResultSchema.parse({
-      headers: [...table.headers],
-      rows: table.rows.map((row) => [...row]),
-    })
+  ipcMain.handle(IPC_CHANNELS.refreshWorkbookConnection, () => {
+    throw new Error('GoodOffice is offline: external workbook data connections cannot be refreshed.')
   })
 
   ipcMain.handle(IPC_CHANNELS.readWorkbookRedactions, async (event, input: unknown) => {
@@ -4375,13 +4336,8 @@ export function registerSheetsIpc(): void {
     },
   )
 
-  ipcMain.handle(IPC_CHANNELS.openExternal, async (event, url: unknown) => {
-    sessionFor(event)
-    const validatedUrl = safeExternalUrl(url)
-    if (!validatedUrl) {
-      throw new Error('Only http(s) links can be opened.')
-    }
-    await shell.openExternal(validatedUrl)
+  ipcMain.handle(IPC_CHANNELS.openExternal, () => {
+    throw new Error('GoodOffice is offline: external links are disabled.')
   })
 
   // ── Chat attachments (same structure as the docs/slides files:* pipeline) ──
@@ -5734,57 +5690,6 @@ export {
   startCaptureServer as startSheetsCaptureServer,
 }
 
-/**
- * Attaches a proxy to the main process's global fetch (same source as
- * slides-main.applyMainProcessProxy): main-process Node fetch (undici) ignores
- * the system proxy by default, so direct connections from mainland networks to
- * overseas LLM endpoints like api.anthropic.com time out or get rejected by
- * egress region (403 Request not allowed). Environment variables take priority;
- * otherwise the system proxy is read via session.resolveProxy() after app ready.
- */
-async function applyMainProcessProxy(): Promise<void> {
-  const setDispatcher = async (proxyUrl: string) => {
-    // spawned gsk CLI children do their own fetch and never see the
-    // dispatcher below — forward the proxy to them via env
-    setGskProxyUrl(proxyUrl)
-    try {
-      const { setGlobalDispatcher } = await import('undici')
-      // loopback stays direct: a Custom provider on 127.0.0.1 must not ride
-      // the proxy as an absolute-form request (genoffice#2084)
-      setGlobalDispatcher(await createMainProcessProxyDispatcher(proxyUrl))
-      // strip user:pass credentials before logging
-      console.log('[proxy] main-process fetch via', proxyUrl.replace(/\/\/[^@/]*@/, '//***@'))
-    } catch (e) {
-      console.warn('[proxy] failed to set proxy dispatcher:', e)
-    }
-  }
-  const envProxy =
-    process.env.HTTPS_PROXY ||
-    process.env.https_proxy ||
-    process.env.HTTP_PROXY ||
-    process.env.http_proxy ||
-    process.env.ALL_PROXY ||
-    process.env.all_proxy
-  if (envProxy) {
-    await setDispatcher(envProxy)
-    return
-  }
-  try {
-    await app.whenReady()
-    // PAC/rule proxies answer per-host: probe the host the login flow, the
-    // Genspark LLM proxy and the gsk CLI actually target
-    const resolved = await electronSession.defaultSession.resolveProxy('https://www.genspark.ai/')
-    const m = /PROXY\s+([^;]+)/i.exec(resolved || '')
-    if (m?.[1]) {
-      await setDispatcher(`http://${m[1].trim()}`)
-    } else {
-      console.log('[proxy] system proxy = DIRECT, no dispatcher set')
-    }
-  } catch (e) {
-    console.warn('[proxy] resolveProxy failed:', e)
-  }
-}
-
 export function startSheetsStandalone(): void {
   registerRendererScheme()
   installNavigationGuard(app)
@@ -5796,14 +5701,13 @@ export function startSheetsStandalone(): void {
   if (!app.isPackaged && process.env.GENOFFICE_USER_DATA) {
     app.setPath('userData', process.env.GENOFFICE_USER_DATA)
   }
-  void applyMainProcessProxy()
   app.whenReady().then(() => {
+    installOfflineNetworkLock(electronSession.defaultSession)
     installRendererProtocol({ sheets: join(__dirname, '../renderer') })
     setUiLang(normalizeLang(process.env.GENOFFICE_LANG ?? app.getLocale()))
     app.setAccessibilitySupportEnabled(true)
     installApplicationMenu()
-    startCaptureServer()
-    return createSheetsWindow()
+    return createSheetsWindow({ includeAiHandlers: false })
   })
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
@@ -5812,7 +5716,7 @@ export function startSheetsStandalone(): void {
     stopSheetsSidecar()
   })
   app.on('activate', () => {
-    if (!mainWindow) void createSheetsWindow()
+    if (!mainWindow) void createSheetsWindow({ includeAiHandlers: false })
   })
 }
 
