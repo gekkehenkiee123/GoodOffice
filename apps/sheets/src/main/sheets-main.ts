@@ -188,8 +188,7 @@ import { installOfflineNetworkLock } from './offline-network'
  * Sheets main-process logic as an embeddable module: no top-level lifecycle.
  * Standalone mode (apps/sheets entry) calls startSheetsStandalone(); the
  * unified shell calls configureSheetsRuntime() + createSheetsWindow() and
- * owns the app lifecycle. AI IPC is registered separately so the shell can
- * substitute its single unified handler set (same channel names as docs).
+ * owns the app lifecycle. GoodOffice only registers spreadsheet and local-file IPC.
  */
 
 const tMain = createI18n({
@@ -5238,7 +5237,7 @@ export function startSheetsStandalone(): void {
     stopSheetsSidecar()
   })
   app.on('activate', () => {
-    if (!mainWindow) void createSheetsWindow({ includeAiHandlers: false })
+    if (!mainWindow) void createSheetsWindow()
   })
 }
 
