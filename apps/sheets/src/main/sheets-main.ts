@@ -23,7 +23,6 @@ import {
 import { runCopyEmfHelper } from './copy-emf-helper'
 import { refreshCsvDigest } from './csv-digest'
 import { ImportRegistry } from './import-registry'
-import { createServer } from 'node:http'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 
 import {
@@ -81,7 +80,6 @@ import {
   writeLegacyImportSkip,
 } from '@genoffice/electron-utils'
 import { createI18n, getUiLang, type Lang, normalizeLang, setUiLang } from '@genoffice/i18n'
-import { ProjectStore } from '@genoffice/project-store'
 
 import {
   AiCreditsError,
@@ -2643,7 +2641,6 @@ export async function createSheetsWindow(
   })
   mainWindow = window
   registerSheetsIpc()
-  if (options.includeAiHandlers ?? true) registerSheetsAiIpc()
   if (options.includeAiHandlers ?? true) registerProjectIpc()
   registerSheetsSession(window.webContents, client)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
