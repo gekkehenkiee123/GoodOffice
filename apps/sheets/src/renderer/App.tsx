@@ -4935,21 +4935,6 @@ export function App({
     }
   }
 
-  /**
-   * Ask the model to name this workbook, on request, then open Save As with its
-   * answer prefilled.
-   *
-   * The stem goes into the dialog rather than renaming the file on disk: a
-   * workbook that may be open in another window, referenced from a note, or
-   * synced is not something to move behind the reader's back. A declined or
-   * empty answer leaves the dialog on the workbook's current name, so this is a
-   * no-op rather than a failure.
-   */
-  async function nameWithAi(): Promise<void> {
-    const stem = await modelSaveAsName(readContext())
-    if (!stem) return
-    await handleSave('save-as', false, undefined, stem)
-  }
   closeSaveRef.current = async () => {
     if (!(await commitActiveEditor())) {
       window.desktopApi?.reportCloseSaveResult?.(false)
