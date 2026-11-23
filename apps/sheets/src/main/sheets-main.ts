@@ -23,7 +23,7 @@ import {
 import { runCopyEmfHelper } from './copy-emf-helper'
 import { refreshCsvDigest } from './csv-digest'
 import { ImportRegistry } from './import-registry'
-import { createServer } from 'node:http'
+import { installGoodOfficeOfflineMode } from './offline-network'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 
 import {
@@ -65,7 +65,6 @@ import {
   installNavigationGuard,
   isHeadlessMode,
   printHtmlToPdf,
-  safeExternalUrl,
   showOpenDialogWithMemory,
   showSaveDialogWithMemory,
   helpMenuTemplate,
@@ -82,7 +81,6 @@ import {
   readLegacyImportSkip,
   writeLegacyImportSkip,
 } from '@genoffice/electron-utils'
-import { createMainProcessProxyDispatcher } from '@genoffice/electron-utils/main-proxy'
 import { fetchRemoteTable } from '@genoffice/electron-utils/remote-table'
 import { createI18n, getUiLang, type Lang, normalizeLang, setUiLang } from '@genoffice/i18n'
 import { ProjectStore } from '@genoffice/project-store'
@@ -2530,9 +2528,7 @@ const SETTINGS_PATH = () => userDataPath('ai-settings.json')
 
 // Dev-only automation hooks: a fixed CDP port for driving the app from test
 // scripts, and a workbook path that bypasses the native file dialog.
-const debugPort = app.isPackaged ? undefined : process.env.XLSX_DEBUG_PORT
-if (debugPort) app.commandLine.appendSwitch('remote-debugging-port', debugPort)
-let forcedWorkbookPath = app.isPackaged ? undefined : process.env.XLSX_OPEN_PATH
+const forcedWorkbookPath = app.isPackaged ? undefined : process.env.XLSX_OPEN_PATH
 /** shell-queued workbook paths keyed by tab webContents id: a multi-select Open
  * creates several sheets tabs at once, so the path must be bound to its own tab
  * (a single global would be overwritten by the next iteration). One-shot, unlike
@@ -2560,68 +2556,13 @@ export function setSheetsNewBlank(): void {
   pendingNewBlank = true
 }
 
-// capturePage forces a renderer frame even when the window is occluded or on
-// another Space, unlike CDP Page.captureScreenshot / macOS screencapture.
-function startCaptureServer(): void {
-  if (!debugPort) return
-  const server = createServer((request, response) => {
-    const url = new URL(request.url ?? '/', 'http://127.0.0.1')
-    if (url.pathname === '/open') {
-      forcedWorkbookPath = url.searchParams.get('path') ?? undefined
-      response.writeHead(200)
-      response.end('ok')
-      return
-    }
-    // Drives the File menu from test scripts: CDP input can't reach native
-    // menu accelerators, and osascript focus-stealing is flaky.
-    if (url.pathname === '/menu') {
-      const action = url.searchParams.get('action')
-      if (
-        action === 'open' ||
-        action === 'save' ||
-        action === 'save-as' ||
-        action === 'print' ||
-        action === 'export-pdf' ||
-        action === 'export-csv' ||
-        action === 'undo' ||
-        action === 'redo'
-      ) {
-        sendSheetsMenuAction(action)
-        response.writeHead(200)
-        response.end('ok')
-      } else {
-        response.writeHead(400)
-        response.end('unknown action')
-      }
-      return
-    }
-    const webContents = getActiveSheetsWebContents()
-    if (url.pathname !== '/capture' || !webContents) {
-      response.writeHead(404)
-      response.end()
-      return
-    }
-    webContents
-      .capturePage()
-      .then((image) => {
-        response.writeHead(200, { 'Content-Type': 'image/png' })
-        response.end(image.toPNG())
-      })
-      .catch((error: unknown) => {
-        response.writeHead(500)
-        response.end(String(error))
-      })
-  })
-  server.listen(Number(debugPort) + 1, '127.0.0.1')
-}
-
 const sidecarOpenResultSchema = workbookFileSchema.omit({
   sha256: true,
   readOnly: true,
 })
 
 export async function createSheetsWindow(
-  options: { includeAiHandlers?: boolean } = {},
+  options: { includeAiHandlers?: boolean } = { includeAiHandlers: false },
 ): Promise<BrowserWindow> {
   await getSessionSnapshotDirectory()
   const client = sidecar ?? new XlsxSidecarClient(resolveSidecarPath())
@@ -2633,7 +2574,7 @@ export async function createSheetsWindow(
     minWidth: 720,
     minHeight: 550,
     show: false,
-    title: 'GenOffice Sheets',
+    title: 'GoodOffice',
     // Traffic lights sit inside the toolbar row.
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     webPreferences: {
@@ -4375,13 +4316,8 @@ export function registerSheetsIpc(): void {
     },
   )
 
-  ipcMain.handle(IPC_CHANNELS.openExternal, async (event, url: unknown) => {
-    sessionFor(event)
-    const validatedUrl = safeExternalUrl(url)
-    if (!validatedUrl) {
-      throw new Error('Only http(s) links can be opened.')
-    }
-    await shell.openExternal(validatedUrl)
+  ipcMain.handle(IPC_CHANNELS.openExternal, () => {
+    throw new Error('GoodOffice is offline: external links are disabled.')
   })
 
   // ── Chat attachments (same structure as the docs/slides files:* pipeline) ──
@@ -5734,58 +5670,12 @@ export {
   startCaptureServer as startSheetsCaptureServer,
 }
 
-/**
- * Attaches a proxy to the main process's global fetch (same source as
- * slides-main.applyMainProcessProxy): main-process Node fetch (undici) ignores
- * the system proxy by default, so direct connections from mainland networks to
- * overseas LLM endpoints like api.anthropic.com time out or get rejected by
- * egress region (403 Request not allowed). Environment variables take priority;
- * otherwise the system proxy is read via session.resolveProxy() after app ready.
- */
-async function applyMainProcessProxy(): Promise<void> {
-  const setDispatcher = async (proxyUrl: string) => {
-    // spawned gsk CLI children do their own fetch and never see the
-    // dispatcher below — forward the proxy to them via env
-    setGskProxyUrl(proxyUrl)
-    try {
-      const { setGlobalDispatcher } = await import('undici')
-      // loopback stays direct: a Custom provider on 127.0.0.1 must not ride
-      // the proxy as an absolute-form request (genoffice#2084)
-      setGlobalDispatcher(await createMainProcessProxyDispatcher(proxyUrl))
-      // strip user:pass credentials before logging
-      console.log('[proxy] main-process fetch via', proxyUrl.replace(/\/\/[^@/]*@/, '//***@'))
-    } catch (e) {
-      console.warn('[proxy] failed to set proxy dispatcher:', e)
-    }
-  }
-  const envProxy =
-    process.env.HTTPS_PROXY ||
-    process.env.https_proxy ||
-    process.env.HTTP_PROXY ||
-    process.env.http_proxy ||
-    process.env.ALL_PROXY ||
-    process.env.all_proxy
-  if (envProxy) {
-    await setDispatcher(envProxy)
-    return
-  }
-  try {
-    await app.whenReady()
-    // PAC/rule proxies answer per-host: probe the host the login flow, the
-    // Genspark LLM proxy and the gsk CLI actually target
-    const resolved = await electronSession.defaultSession.resolveProxy('https://www.genspark.ai/')
-    const m = /PROXY\s+([^;]+)/i.exec(resolved || '')
-    if (m?.[1]) {
-      await setDispatcher(`http://${m[1].trim()}`)
-    } else {
-      console.log('[proxy] system proxy = DIRECT, no dispatcher set')
-    }
-  } catch (e) {
-    console.warn('[proxy] resolveProxy failed:', e)
-  }
-}
-
 export function startSheetsStandalone(): void {
+  app.setName('GoodOffice')
+  app.commandLine.appendSwitch('disable-background-networking')
+  app.commandLine.appendSwitch('disable-domain-reliability')
+  app.commandLine.appendSwitch('disable-component-update')
+  app.commandLine.appendSwitch('disable-sync')
   registerRendererScheme()
   installNavigationGuard(app)
   installContextMenu(app, () => contextMenuLabels(getUiLang()))
@@ -5796,14 +5686,13 @@ export function startSheetsStandalone(): void {
   if (!app.isPackaged && process.env.GENOFFICE_USER_DATA) {
     app.setPath('userData', process.env.GENOFFICE_USER_DATA)
   }
-  void applyMainProcessProxy()
   app.whenReady().then(() => {
+    installGoodOfficeOfflineMode(electronSession.defaultSession)
     installRendererProtocol({ sheets: join(__dirname, '../renderer') })
     setUiLang(normalizeLang(process.env.GENOFFICE_LANG ?? app.getLocale()))
     app.setAccessibilitySupportEnabled(true)
     installApplicationMenu()
-    startCaptureServer()
-    return createSheetsWindow()
+    return createSheetsWindow({ includeAiHandlers: false })
   })
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
@@ -5812,7 +5701,7 @@ export function startSheetsStandalone(): void {
     stopSheetsSidecar()
   })
   app.on('activate', () => {
-    if (!mainWindow) void createSheetsWindow()
+    if (!mainWindow) void createSheetsWindow({ includeAiHandlers: false })
   })
 }
 
