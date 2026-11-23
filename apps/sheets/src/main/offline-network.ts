@@ -21,15 +21,22 @@ function blockedRequest(): never {
  * Chromium. Local app resources use the genoffice-app:// protocol and are not
  * affected. No localhost exception is made in packaged or development builds.
  */
+/**
+ * GoodOffice's only allowed network-like resource schemes. This is deliberately
+ * an allowlist rather than a remote-host denylist.
+ */
+export function isGoodOfficeOfflineUrlAllowed(rawUrl: string): boolean {
+  try {
+    const protocol = new URL(rawUrl).protocol
+    return protocol === 'genoffice-app:' || protocol === 'file:' || protocol === 'data:'
+  } catch {
+    return false
+  }
+}
+
 export function installOfflineNetworkLock(electronSession: Session): void {
   electronSession.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, callback) => {
-    let allowed = false
-    try {
-      const protocol = new URL(details.url).protocol
-      allowed = protocol === 'genoffice-app:' || protocol === 'file:' || protocol === 'data:'
-    } catch {
-      allowed = false
-    }
+    const allowed = isGoodOfficeOfflineUrlAllowed(details.url)
     callback({ cancel: !allowed })
   })
 
