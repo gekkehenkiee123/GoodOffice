@@ -7061,4 +7061,3 @@ export function App({
     setMessage(t('appRangesRecorded', { count: ranges.length }))
     return null
   }
-}
