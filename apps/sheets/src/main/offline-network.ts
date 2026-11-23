@@ -4,6 +4,7 @@ import https from 'node:https'
 import net from 'node:net'
 import tls from 'node:tls'
 import dns from 'node:dns'
+import dgram from 'node:dgram'
 import type { Session } from 'electron'
 
 const OFFLINE_ERROR = 'GoodOffice is offline: network access is disabled.'
@@ -43,12 +44,16 @@ export function installOfflineNetworkLock(electronSession: Session): void {
   // the mutable CommonJS-backed module methods.
   const deny = blockedRequest as unknown as (...args: never[]) => never
   http.request = deny as typeof http.request
+  http.createServer = deny as typeof http.createServer
   http.get = deny as typeof http.get
   https.request = deny as typeof https.request
   https.get = deny as typeof https.get
   net.connect = deny as typeof net.connect
+  net.createServer = deny as typeof net.createServer
   net.createConnection = deny as typeof net.createConnection
   tls.connect = deny as typeof tls.connect
+  tls.createServer = deny as typeof tls.createServer
+  dgram.createSocket = deny as typeof dgram.createSocket
 
   dns.lookup = deny as typeof dns.lookup
   dns.lookupService = deny as typeof dns.lookupService
@@ -65,5 +70,20 @@ export function installOfflineNetworkLock(electronSession: Session): void {
   dns.resolveSrv = deny as typeof dns.resolveSrv
   dns.resolveTxt = deny as typeof dns.resolveTxt
   dns.reverse = deny as typeof dns.reverse
+  dns.promises.lookup = deny as typeof dns.promises.lookup
+  dns.promises.lookupService = deny as typeof dns.promises.lookupService
+  dns.promises.resolve = deny as typeof dns.promises.resolve
+  dns.promises.resolve4 = deny as typeof dns.promises.resolve4
+  dns.promises.resolve6 = deny as typeof dns.promises.resolve6
+  dns.promises.resolveAny = deny as typeof dns.promises.resolveAny
+  dns.promises.resolveCname = deny as typeof dns.promises.resolveCname
+  dns.promises.resolveMx = deny as typeof dns.promises.resolveMx
+  dns.promises.resolveNaptr = deny as typeof dns.promises.resolveNaptr
+  dns.promises.resolveNs = deny as typeof dns.promises.resolveNs
+  dns.promises.resolvePtr = deny as typeof dns.promises.resolvePtr
+  dns.promises.resolveSoa = deny as typeof dns.promises.resolveSoa
+  dns.promises.resolveSrv = deny as typeof dns.promises.resolveSrv
+  dns.promises.resolveTxt = deny as typeof dns.promises.resolveTxt
+  dns.promises.reverse = deny as typeof dns.promises.reverse
   syncBuiltinESMExports()
 }
