@@ -5691,6 +5691,11 @@ export {
 }
 
 export function startSheetsStandalone(): void {
+  app.setName('GoodOffice')
+  app.commandLine.appendSwitch('disable-background-networking')
+  app.commandLine.appendSwitch('disable-domain-reliability')
+  app.commandLine.appendSwitch('disable-component-update')
+  app.commandLine.appendSwitch('disable-sync')
   registerRendererScheme()
   installNavigationGuard(app)
   installContextMenu(app, () => contextMenuLabels(getUiLang()))
